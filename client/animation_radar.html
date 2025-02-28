@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <script src="leaflet.js"></script>
+    <link rel="stylesheet" type="text/css" href="main.css"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Centrale Météo : Températures en France</title>
+</head>
+<body class = "page2" onload="charger_page()">
+    <h1>Températures en France</h1>
+    <button onclick="window.location.href='index.html'">Revenir à l'accueil</button>
+    <form onsubmit="saveDate()">
+    <label for="dateselction">Sélectionnez une date :</label>
+        <input type="date" id="dateselction" name="dateselction" value="1980-01-01">
+        <input type="submit" value="Valider">
+    </form>
+    <div id="texte_station">Station : </div>
+    <div id="texte_temp">Température : </div>
+    <canvas id="Canvas_carte" width="574" height="610"></canvas>
+
+    <script>
+        var data = []; // Variable globale pour stocker les données récupérées
+        var points = []; // Variable globale pour stocker les points calculés
+        
+        function onloadDate() {
+            // Vérifie s'il y a une date sauvegardée dans le localStorage
+            var savedDate = localStorage.getItem('selectedDate');
+            if (savedDate) {
+                document.getElementById('dateselction').value = savedDate;
+            }
+        }
+        
+        function distance(point1, point2) {
+        return ((point1.x-point2.x)^2 + (point1.y - point2.y)^2)^0.5
+        }
+        
+        function couleur(t, tmin, tmax) {
+            if (t==120) {return "#EEEBEA"}
+            if (t < -100) {return "#EEEBEA"}
+            var couleurrouge = [255,4,0];
+            var couleurbleue = [7,53,158];
+            
+            t = Math.max(tmin, Math.min(t, tmax));
+            let ratio = (t - tmin) / (tmax - tmin);
+            let r = Math.round((couleurrouge[0]-couleurbleue[0])*ratio + couleurbleue[0]);
+            let g = Math.round((couleurrouge[1]-couleurbleue[1])*ratio + couleurbleue[1]);
+            let b = Math.round((couleurrouge[2]-couleurbleue[2])*ratio + couleurbleue[2]);;
+            let hexR = r.toString(16).padStart(2, '0');
+            let hexG = g.toString(16).padStart(2, '0');
+            let hexB = b.toString(16).padStart(2, '0');
+            return `#${hexR}${hexG}${hexB}`;
+}
+
+        function calculateTransformation(ref1, ref2) {
+            const { longitude: lon1, latitude: lat1, x: x1, y: y1 } = ref1;
+            const { longitude: lon2, latitude: lat2, x: x2, y: y2 } = ref2;
+            const a = (x2 - x1) / (lon2 - lon1);
+            const c = x1 - a * lon1;
+            const d = (y2 - y1) / (lat2 - lat1);
+            const f = y1 - d * lat1;
+            return { a, c, d, f };
+        }
+
+        function transformPoint(longitude, latitude, coefficients, stid, stname) {
+            const { a, c, d, f } = coefficients;
+            const x = a * longitude + c;
+            const y = d * latitude + f;
+            const xinit = longitude;
+            const yinit = latitude;
+            const station = stid;
+            const namestation = stname;
+            return { x, y, xinit, yinit, station, namestation};
+        }
+        
+        function calcule_point(data) {
+            const ref1 = { longitude: 0.9049426208585158, latitude: 43.31977544988279, x: 200, y: 500 };
+            const ref2 = { longitude: 7.154307667306017, latitude: 49.49749585974278, x: 450, y: 90 };
+            const coefficients = calculateTransformation(ref1, ref2);
+
+            for (let n = 0; n < data.length; n++) {
+                const point = transformPoint(data[n].lon, data[n].lat, coefficients, data[n].staid, data[n].statname);
+                points.push(point);
+            }
+        }
+        
+        function calculateDistance(pointA, pointB) {
+            const dx = pointA.x - pointB.x;
+            const dy = pointA.y - pointB.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+        
+        function findMinimumDistance(point, points) {
+            let minDistance = Infinity;
+        
+            for (let i = 0; i < points.length; i++) {
+                // Ignorer le point lui-même
+                if (points[i] !== point) {
+                    const distance = calculateDistance(point, points[i]);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                    }
+                }
+            }
+        
+            return minDistance;
+        }
+
+
+        function drawPoints(ctx) {
+            ctx.fillStyle = 'red';
+            ctx.globalAlpha = 0.5; // Définir la transparence (0.0 est complètement transparent, 1.0 est opaque)
+            var date = document.getElementById('dateselction').value;
+            points.forEach(point => {
+                
+                
+                var xh_temp = new XMLHttpRequest();
+                xh_temp.onload = function() {
+                data_temp = JSON.parse(this.responseText);
+                ctx.beginPath();
+                ctx.fillStyle = couleur(data_temp.temp,-20,50);
+                var R =  findMinimumDistance(point,points)/2;
+                point.r = R;
+                point.temp = data_temp.temp;
+                ctx.arc(point.x, point.y,R, 0, 2 * Math.PI); // 5 est le rayon du point
+                ctx.fill();
+                ctx.font = "12px Arial";
+                ctx.fillStyle = "white"; 
+                var temp = data_temp.temp.toString();
+                if (temp == 120){}
+                else{
+                if (temp == -999.9){}
+                else{
+                ctx.fillText(data_temp.temp.toString(), point.x - 10, point.y+5);}
+                }
+                };
+                xh_temp.open('GET', '/temperature/'+point.station+'/'+date, true);
+                xh_temp.send();
+                //ctx.fillStyle = couleur(0,-10,34.8);
+                //ctx.arc(point.x, point.y, findMinimumDistance(point,points)/2, 0, 2 * Math.PI); // 5 est le rayon du point
+                //ctx.fill();
+            });
+
+            ctx.globalAlpha = 1.0; // Réinitialiser la transparence
+        }
+        
+        function saveDate() {
+            var selectedDate = document.getElementById('dateselction').value;
+            localStorage.setItem('selectedDate', selectedDate);
+        }
+        
+        function modifier_temperature(temp) {
+        document.getElementById("texte_temp").innerHTML = "Température : "+temp ;
+        }
+        function modifier_station(station) {
+        document.getElementById("texte_station").innerHTML = "Station : "+station ;
+        }
+
+        function charger_page() {
+            onloadDate();
+            var xhr = new XMLHttpRequest();
+            xhr.onload = function() {
+                data = JSON.parse(this.responseText); // Stocker les données dans la variable globale
+                calcule_point(data);
+                const canvas = document.getElementById('Canvas_carte');
+                
+                canvas.addEventListener('click', function(event) {
+    let rect = canvas.getBoundingClientRect();
+    let x = event.clientX - rect.left;
+    let y = event.clientY - rect.top;
+    points.forEach(function(point) {
+        let distance = Math.sqrt((point.x - x) * (point.x - x) + (point.y - y) * (point.y - y));
+        if (distance <= point.r) {
+        modifier_station(point.namestation);
+        
+        if (point.temp == 120){modifier_temperature("indéfinie");;
+        }
+        else {
+        if (point.temp == -999.9){modifier_temperature("indéfinie");}
+        else{
+        modifier_temperature(point.temp);
+            
+            }
+        }}
+    });
+});
+                
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                img.src = 'images/france.png';
+
+                img.onload = function() {
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    drawPoints(ctx); 
+                };
+            };
+            xhr.open('GET', '/station', true);
+            xhr.send();
+        }
+        
+        
+    </script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Températures en France</title>
+    <link rel="stylesheet" type="text/css" href="leaflet.css">
+    <link rel="stylesheet" type="text/css" href="main.css">
+    <script src="leaflet.js"></script>
+    <style>
+        #map { height: 600px; width: 100%; }
+    </style>
+</head>
+<body  class="page3" onload="load_stations()">
+    <h1>Températures en France</h1>
+
+    <div id="map"></div> 
+
+    <div id="controls">
+        <label for="start-date">Date de début :</label>
+        <input type="date" id="start-date" name="start-date">
+        
+        <label for="end-date">Date de fin :</label>
+        <input type="date" id="end-date" name="end-date">
+        
+        <button id="update-graph" onclick="afficheCourbe()">Afficher la courbe</button>
+        <button onclick="window.location.href='index.html'">Retour à l'accueil</button>
+    </div>
+
+    <div id="reponse">
+        <p align="center"></p>
+        <img width="70%" src="" alt="Graphique des températures" id="graph-img">
+    </div>
+
+    <script>
+        var lastIconSelect = 0;
+        var map = L.map('map').setView([46.5, 2.5], 5);
+        L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        var customIcon = L.icon({
+            iconUrl: 'images/pin.png',
+            iconSize: [26, 26],
+            iconAnchor: [13, 26],
+            popupAnchor: [0, -26]
+        });
+
+        var selectedIcon = L.icon({
+            iconUrl: 'images/pin_selected.png',
+            iconSize: [26, 26],
+            iconAnchor: [13, 26],
+            popupAnchor: [0, -26]
+        });
+
+        var lastSelectedMarker = null;
+
+        function load_stations() {
+            var xhr = new XMLHttpRequest();
+            xhr.onload = function() {
+                var data = JSON.parse(this.responseText);
+                data.forEach(function(station) {
+                    var marker = L.marker([station.lat, station.lon], {icon: customIcon}).addTo(map)
+                      .on('click', onStationClick)
+                      .bindTooltip(station.statname, {
+                          permanent: false,
+                          direction: 'top',
+                          offset: [0, -26]
+                      });
+                    marker.staid = station.staid;
+                });
+            };
+            xhr.open('GET', '/station', true);
+            xhr.send();
+        }
+        function afficheCourbe(){
+        e = lastIconSelect;
+        if (e==0){}
+        else{
+        var xhr = new XMLHttpRequest();
+        var image = document.getElementById('graph-img');
+        var legend = document.querySelector('#reponse p');
+
+        xhr.onload = function() {
+            console.log(this.responseText); // Vérifier la réponse
+            var data = JSON.parse(this.responseText);
+            image.src = data.img;
+            image.alt = data.title;
+            legend.innerHTML = data.title;}
+        };
+        var datestart = document.getElementById('start-date').value;
+        var dateend = document.getElementById('end-date').value;
+        xhr.open('GET', 'graph/' + e.target.staid+'/'+datestart+'/'+dateend, true);
+        xhr.send();
+        }
+        function onStationClick(e) {
+            if (lastSelectedMarker !== null) {
+                lastSelectedMarker.setIcon(customIcon);
+            }
+
+            e.target.setIcon(selectedIcon);
+            lastSelectedMarker = e.target;
+            lastIconSelect = e;
+            afficheCourbe();
+        }
+    </script>
+</body>
+</html>
